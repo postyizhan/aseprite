@@ -54,6 +54,36 @@ jobs:
         shell: bash
         run: cmake --build build --target aseprite
 
+      - name: Bundle OpenSSL runtime DLLs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # The Windows build can depend on OpenSSL DLLs from Git for Windows.
+          # Put them next to aseprite.exe so the downloaded artifact starts
+          # without requiring users to install/copy DLLs manually.
+          dll_roots=(
+            "/mingw64/bin"
+            "/c/Program Files/Git/mingw64/bin"
+          )
+
+          for dll in libcrypto-3-x64.dll libssl-3-x64.dll; do
+            src=""
+            for root in "${dll_roots[@]}"; do
+              if [[ -f "$root/$dll" ]]; then
+                src="$root/$dll"
+                break
+              fi
+            done
+
+            if [[ -z "$src" ]]; then
+              echo "::error::$dll was not found in Git for Windows' mingw64/bin"
+              exit 1
+            fi
+
+            cp -v "$src" build/bin/
+          done
+
       - name: Package
         shell: pwsh
         run: |
