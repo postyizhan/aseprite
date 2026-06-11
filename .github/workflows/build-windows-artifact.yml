@@ -1,0 +1,63 @@
+name: Build Windows Artifact
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Windows x64 RelWithDebInfo
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Ninja
+        uses: aseprite/get-ninja@main
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Download Skia
+        shell: bash
+        run: |
+          skia_url=$(bash laf/misc/skia-url.sh Release Windows x64)
+          echo "Downloading $skia_url"
+          curl --ssl-revoke-best-effort -L -o skia.zip "$skia_url"
+          unzip -q skia.zip -d skia
+
+      - name: Configure
+        shell: bash
+        run: |
+          skia_dir=$(cygpath -m "$PWD/skia")
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DENABLE_TESTS=OFF \
+            -DLAF_BACKEND=skia \
+            -DSKIA_DIR="$skia_dir" \
+            -DSKIA_LIBRARY_DIR="$skia_dir/out/Release-x64" \
+            -DSKIA_LIBRARY="$skia_dir/out/Release-x64/skia.lib"
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --target aseprite
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/bin/* -DestinationPath aseprite-windows-x64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aseprite-windows-x64
+          path: aseprite-windows-x64.zip
+          retention-days: 7
